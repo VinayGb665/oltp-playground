@@ -1,0 +1,11 @@
+venv
+__pycache__/
+deps/data
+deps/confluent-hub-components
+deps/lenses
+deps/*.jar
+deps/a
+back_store.db
+*.json
+*.conf
+*pem
