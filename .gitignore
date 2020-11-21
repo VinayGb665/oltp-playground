@@ -10,3 +10,4 @@ back_store.db
 *.json
 *.conf
 *pem
+*.log
