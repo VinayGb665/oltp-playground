@@ -1,0 +1,15 @@
+version: '2'
+services:
+    connect:
+      image: debezium/connect:${DEBEZIUM_VERSION}
+      network_mode: host
+      environment:
+      - BOOTSTRAP_SERVERS=192.168.43.147:9092
+      - GROUP_ID=1
+      - CONFIG_STORAGE_TOPIC=my_connect_configs
+      - OFFSET_STORAGE_TOPIC=my_connect_offsets
+      - PLUGIN_PATH=/usr/share/java,/usr/share/confluent-hub-components/
+      - REST_ADVERTISED_HOST_NAME=localhost
+      - BIND_ADDRESS=localhost
+      volumes:
+        - $PWD/confluent-hub-components:/usr/share/confluent-hub-components/

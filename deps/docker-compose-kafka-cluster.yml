@@ -1,0 +1,359 @@
+  version: '3'
+  services:
+    zoo1:
+      image: confluentinc/cp-zookeeper:latest
+      container_name : zoo1
+      hostname: zoo1
+      ports:
+      - 2181:2181
+      # - 22888:22888
+      # - 23888:23888
+      environment:
+        KAFKA_HEAP_OPTS: '-Xms4g -Xmx4g' ## Sets jvm heap size to 2gb
+        ZOOKEEPER_SERVER_ID: 1
+        ZOOKEEPER_CLIENT_PORT: 2181
+        ZOOKEEPER_TICK_TIME: 2000
+        ZOOKEEPER_INIT_LIMIT: 5
+        ZOOKEEPER_SYNC_LIMIT: 1
+        ZOOKEEPER_SERVERS: zoo1:22888:23888;zoo2:22888:23888;zoo3:22888:23888
+      networks:
+      - kafka_net
+      deploy:
+        replicas: 2
+      # deploy:
+      #   placement:
+      #     constraints: [node.role == manager]
+      volumes:
+      - $PWD/data/zoo1/data:/var/lib/zookeeper/data
+      - $PWD/data/zoo1/logs:/var/lib/zookeeper/log
+
+
+    zoo2:
+      image: confluentinc/cp-zookeeper:latest
+      container_name : zoo2
+      hostname: zoo2
+      ports:
+      - 2182:2182
+      # - 22888:22888
+      # - 23888:23888
+      environment:
+        KAFKA_HEAP_OPTS: '-Xms4g -Xmx4g'
+        ZOOKEEPER_SERVER_ID: 2
+        ZOOKEEPER_CLIENT_PORT: 2182
+        ZOOKEEPER_TICK_TIME: 2000
+        ZOOKEEPER_INIT_LIMIT: 5
+        ZOOKEEPER_SYNC_LIMIT: 1
+        ZOOKEEPER_SERVERS: zoo1:22888:23888;zoo2:22888:23888;zoo3:22888:23888
+      networks:
+      - kafka_net
+      deploy:
+        replicas: 2
+      # deploy:
+      #   placement:
+      #     constraints: [node.role == manager]
+      volumes:
+      - $PWD/data/zoo2/data:/var/lib/zookeeper/data
+      - $PWD/data/zoo2/logs:/var/lib/zookeeper/log
+
+    zoo3:
+      image: confluentinc/cp-zookeeper:latest
+      container_name : zoo3
+      hostname: zoo3
+      ports:
+      - 2183:2183
+      # - 22888:22888
+      # - 23888:23888
+      environment:
+        KAFKA_HEAP_OPTS: '-Xms4g -Xmx4g'
+        ZOOKEEPER_SERVER_ID: 3
+        ZOOKEEPER_CLIENT_PORT: 2183
+        ZOOKEEPER_TICK_TIME: 2000
+        ZOOKEEPER_INIT_LIMIT: 5
+        ZOOKEEPER_SYNC_LIMIT: 1
+        ZOOKEEPER_SERVERS: zoo1:22888:23888;zoo2:22888:23888;zoo3:22888:23888
+      networks:
+      - kafka_net
+      deploy:
+        replicas: 2
+      # deploy:
+      #   placement:
+      #     constraints: [node.role == manager]
+      volumes:
+      - $PWD/data/zoo3/data:/var/lib/zookeeper/data
+      - $PWD/data/zoo3/logs:/var/lib/zookeeper/log
+
+    lenses:
+      image: landoop/lenses
+      environment:
+        LENSES_PORT: 9992
+        LENSES_KAFKA_BROKERS: "PLAINTEXT://kafka.db.devlabs.synctactic.ai:9092"
+        LENSES_LICENSE_URL: "https://dl.lenses.io/d/?id=ab62e75c-b22d-4aa9-980b-46e39a43a4b9"
+        LENSES_KAFKA_CONNECT_CLUSTERS: |
+          [
+            {
+              name:"cdc_connectors",
+              urls: [
+                {url:"http://kafka.db.devlabs.synctactic.ai:8083"}
+              ],
+              statuses:"connect-statuses-cluster-a",
+              configs:"connect-configs-cluster-a",
+              offsets:"connect-offsets-cluster-a"
+            }
+          ]
+
+      ports:
+        - 9992:9992
+        - 9102:9102
+      volumes:
+        - ./lenses:/data
+        # - ./data/security.conf:/data/security.conf
+      network_mode: host
+
+    kafka-1:
+      image: confluentinc/cp-kafka:latest
+      container_name : kafka1
+      hostname : kafka1
+      networks:
+      - kafka_net
+      ports:
+        - 9092:9092
+      depends_on:
+        - zoo1
+      deploy:
+        replicas: 2
+      environment:
+        HOSTNAME_COMMAND: "docker info | grep ^Name: | cut -d' ' -f 2"
+        KAFKA_MESSAGE_MAX_BYTES: 10000012
+        # KAFKA_BROKER_ID: 1
+        KAFKA_NUM_IO_THREADS: 16
+        # KAFKA_HEAP_OPTS: '-Xms6g -Xmx6g -XX:MetaspaceSize=96m -XX:+UseG1GC -XX:MaxGCPauseMillis=20
+        #  -XX:InitiatingHeapOccupancyPercent=35 -XX:G1HeapRegionSize=16M
+        #  -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80'
+        KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        # KAFKA_LISTENERS: PLAINTEXT://kafka1:9092
+        KAFKA_LISTENERS: INSIDE://:19092,OUTSIDE://:9092
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+        KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+        # KAFKA_MIN_INSYNC_REPLICAS: 2
+        KAFKA_ADVERTISED_LISTENERS: INSIDE://:19092,OUTSIDE://localhost:9092
+        KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: 'false' ## Disable leader to be chosen outside in-sync replicas
+        # KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:9092
+        KAFKA_LOG_RETENTION_HOURS: 768
+        KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+        KAFKA_NUM_PARTITIONS: 3
+        KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+        KAFKA_LOG_DIRS: /kafka/kafka-logs
+      volumes:
+        - $PWD/data/kafka1:/kafka/kafka-logs
+      # deploy:
+      #   placement:
+      #     constraints: [node.role == manager]
+
+    kafka-2:
+      image: confluentinc/cp-kafka:latest
+      container_name : kafka2
+      networks:
+      - kafka_net
+      ports:
+        - 9093:9093
+      depends_on:
+        - zoo1
+        - kafka-1
+      deploy:
+        replicas: 2
+      environment:
+        # HOSTNAME_COMMAND: "docker info | grep ^Name: | cut -d' ' -f 2"
+        KAFKA_MESSAGE_MAX_BYTES: 10000012
+        # KAFKA_BROKER_ID: 2
+        KAFKA_NUM_IO_THREADS: 16
+        # KAFKA_HEAP_OPTS: '-Xms6g -Xmx6g -XX:MetaspaceSize=96m -XX:+UseG1GC -XX:MaxGCPauseMillis=20
+        #  -XX:InitiatingHeapOccupancyPercent=35 -XX:G1HeapRegionSize=16M
+        #  -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80'
+        KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        # KAFKA_LISTENERS: PLAINTEXT://kafka2:9093
+        KAFKA_LISTENERS: INSIDE://:19093,OUTSIDE://:9093
+        # KAFKA_MIN_INSYNC_REPLICAS: 2
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+        KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+        KAFKA_ADVERTISED_LISTENERS: INSIDE://:19093,OUTSIDE://localhost:9093
+        # KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9093
+        KAFKA_LOG_RETENTION_HOURS: 768
+        KAFKA_BROKER_ID_GENERATIO_ENABLE : 'true'
+        KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+        KAFKA_NUM_PARTITIONS: 3
+        KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+        KAFKA_LOG_DIRS: /kafka/kafka-logs
+      volumes:
+        - $PWD/data/kafka2:/kafka/kafka-logs
+      # deploy:
+      #   placement:
+      #     constraints: [node.role == manager]
+
+    kafka-3:
+      image: confluentinc/cp-kafka:latest
+      container_name : kafka3
+      networks:
+      - kafka_net
+      ports:
+        - 9094:9094
+      deploy:
+        replicas: 2
+      depends_on:
+        - zoo1
+        - kafka-2
+      environment:
+        # HOSTNAME_COMMAND: "docker info | grep ^Name: | cut -d' ' -f 2"
+        KAFKA_MESSAGE_MAX_BYTES: 10000012
+        # KAFKA_BROKER_ID: 3
+        KAFKA_NUM_IO_THREADS: 16
+        KAFKA_HEAP_OPTS: '-Xms4g -Xmx4g'
+        KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        # KAFKA_MIN_INSYNC_REPLICAS: 2
+        KAFKA_HEAP_OPTS: '-Xms6g -Xmx6g -XX:MetaspaceSize=96m -XX:+UseG1GC -XX:MaxGCPauseMillis=20
+         -XX:InitiatingHeapOccupancyPercent=35 -XX:G1HeapRegionSize=16M
+         -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80'
+        # KAFKA_LISTENERS: PLAINTEXT://kafka2:9093
+        KAFKA_LISTENERS: INSIDE://:19094,OUTSIDE://:9094
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+        KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+        KAFKA_ADVERTISED_LISTENERS: INSIDE://:19094,OUTSIDE://localhost:9094
+        # KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9093
+        KAFKA_LOG_RETENTION_HOURS: 768
+        KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+        KAFKA_NUM_PARTITIONS: 3
+        KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+        KAFKA_LOG_DIRS: /kafka/kafka-logs
+      volumes:
+        - $PWD/data/kafka3:/kafka/kafka-logs
+      # deploy:
+      #   placement:
+      #     constraints: [node.role == manager]
+
+    kafka-4:
+      image: confluentinc/cp-kafka:latest
+      container_name : kafka
+      networks:
+      - kafka_net
+      ports:
+        - 9095:9095
+      deploy:
+        replicas: 2
+      depends_on:
+        - zoo1
+        # - kafka-2
+      environment:
+        # HOSTNAME_COMMAND: "docker info | grep ^Name: | cut -d' ' -f 2"
+        KAFKA_MESSAGE_MAX_BYTES: 10000012
+        # KAFKA_BROKER_ID: 4
+        KAFKA_NUM_IO_THREADS: 16
+        KAFKA_HEAP_OPTS: '-Xms4g -Xmx4g'
+        KAFKA_BROKER_ID_GENERATIO_ENABLE : 'true'
+        KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        # KAFKA_LISTENERS: PLAINTEXT://kafka2:9093
+        # KAFKA_MIN_INSYNC_REPLICAS: 2
+        KAFKA_LISTENERS: INSIDE://:19095,OUTSIDE://:9095
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+        KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+        KAFKA_HEAP_OPTS: '-Xms6g -Xmx6g -XX:MetaspaceSize=96m -XX:+UseG1GC -XX:MaxGCPauseMillis=20
+         -XX:InitiatingHeapOccupancyPercent=35 -XX:G1HeapRegionSize=16M
+         -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80'
+        KAFKA_ADVERTISED_LISTENERS: INSIDE://:19095,OUTSIDE://localhost:9095
+        # KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9093
+        KAFKA_LOG_RETENTION_HOURS: 768
+        KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+        KAFKA_NUM_PARTITIONS: 3
+        KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+        KAFKA_LOG_DIRS: /kafka/kafka-logs
+      volumes:
+        - $PWD/data/kafka4:/kafka/kafka-logs
+
+    kafka-5:
+      image: confluentinc/cp-kafka:latest
+      container_name : kafka5
+      networks:
+      - kafka_net
+      ports:
+        - 9096:9096
+      deploy:
+        replicas: 2
+      depends_on:
+        - zoo1
+        # - kafka-2
+      environment:
+        # HOSTNAME_COMMAND: "docker info | grep ^Name: | cut -d' ' -f 2"
+        KAFKA_MESSAGE_MAX_BYTES: 10000012
+
+        # KAFKA_BROKER_ID: 4
+        KAFKA_NUM_IO_THREADS: 16
+        KAFKA_HEAP_OPTS: '-Xms4g -Xmx4g'
+        KAFKA_BROKER_ID_GENERATIO_ENABLE : 'true'
+        KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        # KAFKA_LISTENERS: PLAINTEXT://kafka2:9093
+        # KAFKA_MIN_INSYNC_REPLICAS: 2
+        KAFKA_LISTENERS: INSIDE://:19096,OUTSIDE://:9096
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+        KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+        KAFKA_HEAP_OPTS: '-Xms6g -Xmx6g -XX:MetaspaceSize=96m -XX:+UseG1GC -XX:MaxGCPauseMillis=20
+         -XX:InitiatingHeapOccupancyPercent=35 -XX:G1HeapRegionSize=16M
+         -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80'
+        KAFKA_ADVERTISED_LISTENERS: INSIDE://:19096,OUTSIDE://localhost:9096
+        # KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9093
+        KAFKA_LOG_RETENTION_HOURS: 768
+        KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+        KAFKA_NUM_PARTITIONS: 3
+        KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+        KAFKA_LOG_DIRS: /kafka/kafka-logs
+      volumes:
+        - $PWD/data/kafka5:/kafka/kafka-logs
+      # deploy:
+      #   placement:
+      #     constraints: [node.role == manager]
+
+    kafka-6:
+      image: confluentinc/cp-kafka:latest
+      container_name : kafka6
+      networks:
+      - kafka_net
+      ports:
+        - 9097:9097
+      deploy:
+        replicas: 2
+      depends_on:
+        - zoo1
+        # - kafka-2
+      environment:
+        # HOSTNAME_COMMAND: "docker info | grep ^Name: | cut -d' ' -f 2"
+        KAFKA_MESSAGE_MAX_BYTES: 10000012
+        KAFKA_REPLICA_FETCH_MAX_BYTES: 10000012
+        # KAFKA_BROKER_ID: 4
+        KAFKA_HEAP_OPTS: '-Xms4g -Xmx4g'
+        KAFKA_BROKER_ID_GENERATIO_ENABLE : 'true'
+        KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        # KAFKA_LISTENERS: PLAINTEXT://kafka2:9093
+        # KAFKA_MIN_INSYNC_REPLICAS: 2
+        KAFKA_NUM_IO_THREADS: 16
+        KAFKA_LISTENERS: INSIDE://:19097,OUTSIDE://:9097
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+        KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+        KAFKA_HEAP_OPTS: '-Xms6g -Xmx6g -XX:MetaspaceSize=96m -XX:+UseG1GC -XX:MaxGCPauseMillis=20
+         -XX:InitiatingHeapOccupancyPercent=35 -XX:G1HeapRegionSize=16M
+         -XX:MinMetaspaceFreeRatio=50 -XX:MaxMetaspaceFreeRatio=80'
+        KAFKA_ADVERTISED_LISTENERS: INSIDE://:19097,OUTSIDE://localhost:9097
+        # KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9093
+        KAFKA_LOG_RETENTION_HOURS: 768
+        KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+        KAFKA_NUM_PARTITIONS: 3
+        KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+        KAFKA_LOG_DIRS: /kafka/kafka-logs
+      volumes:
+        - $PWD/data/kafka6:/kafka/kafka-logs
+  networks:
+    kafka_net:
+
+  volumes:
+    zoo1_data:
+      driver: local
+    zoo2_data:
+      driver: local
+    zoo3_data:
+      driver: local

@@ -5,6 +5,7 @@ deps/confluent-hub-components
 deps/lenses
 deps/*.jar
 deps/a
+src/api/downloads/
 back_store.db
 *.json
 *.conf
