@@ -1,3 +1,4 @@
+import json
 import copy
 import networkx as nx
 import pprint
@@ -7,59 +8,15 @@ import threading
 from time import sleep
 from executor.graph_generator import gnp_random_connected_graph
 from executor.task_manager import TaskManager
-
+from executor.poller import task_poller
 import random
+
 class SomeShit():
     def __init__(self, *args, **kwargs):
         self.convergence = 1
         self.processed_nodes = set()
         self.queued_nodes = set()
-        self.graph_request = [
-            {
-                "name" : "a",
-                "downstreams" : ["b"],
-                "upstreams" : []
-            },
-            
-            {
-                "name" : "b",
-                "downstreams" : ["e"],
-                "upstreams" : []
-            },
-            {
-                "name" : "c",
-                "downstreams" : ["d"],
-                "upstreams" : []
-            },
-            {
-                "name" : "d",
-                "downstreams" : ["e"],
-                "upstreams" : []
-            },
-            {
-                "name" : "e",
-                "downstreams" : ["f", "h"]
-            },
-            {
-                "name" : "f",
-                "downstreams" : ["g"],
-                "upstreams" : []
-            },
-            {
-                "name" : "h",
-                "downstreams" : ["g"],
-                "upstreams" : []
-            },
-            {
-                "name" : "g",
-                "downstreams" : [],
-                "upstreams" : []
-            },
-            
-
-        ]
-
-        pass
+        self.graph_request = kwargs.get('req')
     
     def create_n_point_graph(self, n):
         graph = []
@@ -117,13 +74,13 @@ class SomeShit():
             downstreams = point.get('downstreams')
             for each_downstream in downstreams:
                 edge = (pointname, each_downstream)
-                print(edge)
                 g.add_edge(*edge)
         print("=============")
         nx.draw(g,with_labels=True)
-        plt.show(block=False)
-        plt.pause(2)
-        plt.close()
+        # plt.show(block=False)
+        # plt.pause(2)
+        # plt.close()
+        plt.savefig('latestdag.png')
         return g
     
     def run_or_queue(self, graph, node):
@@ -189,16 +146,6 @@ class SomeShit():
                     self.queued_nodes.add(i)
                 
             self.join_thread_pool(thread_pool)
-        
-    def task_poller(self, tasks, tm: TaskManager):        
-        while True:
-            results = tm.check_status(tasks)        
-            if results:
-                print("All dependent tasks have been executed, spawning next layer")
-                return results
-            print("All the tasks have not been executed yet. So polling(sleep for 10 seconds) ")
-            sleep(10)
-
 
     def parse_graph_celery(self, g=None):
         tm = TaskManager()
@@ -225,9 +172,7 @@ class SomeShit():
                     print(f"Processing node - {i} (Outedges for node {i} {g.edges(i)})")
                     task_id = tm.spawn_task(i)
                     self.processed_nodes.add(i)
-                    # thread = self.spawn_thread_task(i)
                     task_pool.append(task_id)
-                    # self.processed_nodes.adscriptd(i)
                     out_edges = g.edges(i)
                     for _, nextnode in out_edges:
                         queue.add(nextnode)
@@ -235,13 +180,13 @@ class SomeShit():
                     print(f"Dependent nodes were not ready/failed for node {i}, so queuing now")
                     self.queued_nodes.add(i)
                 
-            self.task_poller(task_pool, tm)
+            task_poller(task_pool, tm)
 
             
         # print(start_nodes)
 
 if __name__ == "__main__":
-    shit = SomeShit()
+    # shit = SomeShit()
     # graph = shit.plot_graph_on_array()
     # nodes = random.randint(5,10)
     # seed = random.randint(1,10)
@@ -254,5 +199,8 @@ if __name__ == "__main__":
     #         node_size=500)
     # plt.show()
     # print(f"Cycles in graph are {list(nx.simple_cycles(g))}")
-    shit.parse_graph_celery()
+    # shit.parse_graph_celery()
     # shit.spawn_thread_task(1)
+    req = json.loads(open('executor/request_sample2', 'r').read())
+    shit = SomeShit(req=req)
+    shit.parse_graph_celery()
